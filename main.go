@@ -5,7 +5,7 @@ import "fmt"
 import "io/ioutil"
 import "os"
 import "path/filepath"
-import "reporter"
+import "github.com/aisola/reporter"
 import "strings"
 
 const (

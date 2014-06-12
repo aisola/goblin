@@ -2,10 +2,9 @@ package main
 
 import "flag"
 import "fmt"
-import "io/ioutil"
+import "github.com/aisola/reporter"
 import "os"
 import "path/filepath"
-import "github.com/aisola/reporter"
 import "strings"
 
 const (
@@ -84,48 +83,29 @@ func main() {
 
 	} else if commands[0] == "build" {
 
-		if !Exists("config.json") {
-			LOG.Fatal("no config.json file found in this directory")
-		}
-
-		pagefiles, err := ioutil.ReadDir(filepath.Join(".", "src", "pages"))
-		LOG.FatalOnError(err, "could not read directory '%s': %s", filepath.Join(".", "src", "pages"), err)
-
-		// ensure they have a .md ending
-		var pages []string
-		for i := 0; i < len(pagefiles); i++ {
-			if pagefiles[i].Name()[len(pagefiles[i].Name())-3:] == ".md" {
-				pages = append(pages, pagefiles[i].Name())
-			}
-		}
-
-		for i := 0; i < len(pages); i++ {
-			fp, err := os.Open(filepath.Join(".", "src", "pages", pages[i]))
-			LOG.FatalOnError(err, "could not open file '%s': %s", pages[i], err)
-
-			contents, err := ioutil.ReadAll(fp)
-			LOG.FatalOnError(err, "could not read file '%s': %s", pages[i], err)
-			fp.Close()
-
-			fp, err = os.OpenFile(filepath.Join(".", "build", strings.Replace(pages[i], ".md", ".html", -1)), os.O_CREATE, 0600)
-			LOG.FatalOnError(err, "could not open file '%s': %s", strings.Replace(pages[i], ".md", ".html", -1), err)
-			fp.Write(RenderMarkdown(contents))
-			fp.Close()
-		}
-
-	} else if commands[0] == "serve" {
 		manager := LoadConfig("config.json")
 		manager.LoadPages()
 		pages := manager.CheckPages()
+
 		for i := 0; i < len(pages); i++ {
-			if *verbose || *verbose2 { LOG.Infof("building %s", pages[i].Name) }
-			fp, err := os.OpenFile(filepath.Join(".", "build", strings.Replace(pages[i].Name, ".md", ".html", -1)), os.O_CREATE, 0600)
-			LOG.FatalOnError(err, "could not open file '%s': %s", strings.Replace(pages[i].Name, ".md", ".html", -1), err)
-			fp.Write(RenderMarkdown(pages[i].Content))
-			fp.Close()
+			if *verbose || *verbose2 {
+				LOG.Infof("building %s", pages[i].Name())
+			}
+
+			page := manager.LoadPage(pages[i])
+
+			html_name := filepath.Join(manager.Fspath, "build", strings.Replace(page.Fi.Name(), ".md", ".html", -1))
+
+			file, err := os.OpenFile(html_name, os.O_CREATE, 0644)
+			LOG.FatalOnError(err, "could not open file '%s': %s", html_name, err)
+
+			file.Write(RenderMarkdown([]byte(page.Content)))
+			file.Close()
 		}
 		manager.SaveRecords()
-		// LOG.Fatal("feature 'serve' not yet implemented")
+
+	} else if commands[0] == "serve" {
+		LOG.Fatal("feature 'serve' not yet implemented")
 	} else if commands[0] == "deploy" {
 		LOG.Fatal("feature 'deploy' not yet implemented")
 	} else {

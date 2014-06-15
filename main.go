@@ -1,123 +1,91 @@
 package main
 
-import "flag"
-import "fmt"
-import "github.com/aisola/reporter"
 import "os"
 import "path/filepath"
 import "strings"
 
-const (
-	help_text string = `
-    Usage: goblin [command] [arguments]
-    
-    A lightweight static site generator written in Go.
+import "github.com/aisola/reporter"
+import "github.com/codegangsta/cli"
 
-          --help     display this help and exit
-          --legal    displays legal notice and exit
-          --version  output version information and exit
+const VERSION = "0.2"
 
-          -v, --verbose  show the names of the files in build
-    `
-	version_text = `0.1`
-	legal_text   = `    
-    Copyright (C) 2014 Abram C. Isola.
-    This program comes with ABSOLUTELY NO WARRANTY; for details see
-    LICENSE. This is free software, and you are welcome to redistribute 
-    it under certain conditions in LICENSE.
-`
-)
-
-var LOG *reporter.Reporter = reporter.NewReporter("goblin", nil)
+var OUT = reporter.NewReporter("goblin", os.Stdout)
 
 func main() {
-	help := flag.Bool("help", false, help_text)
-	legal := flag.Bool("legal", false, legal_text)
-	version := flag.Bool("version", false, version_text)
-	verbose := flag.Bool("v", false, "be verbose")
-	verbose2 := flag.Bool("verbose", false, "show the names of the files in build")
-	flag.Parse()
-
-	if *help {
-		fmt.Println(help_text)
-		os.Exit(0)
-	}
-
-	if *version {
-		fmt.Println(version_text)
-		os.Exit(0)
-	}
-
-	if *legal {
-		fmt.Println(legal_text)
-		os.Exit(0)
-	}
-
-	if flag.NArg() < 1 {
-		LOG.Fatal("missing operands")
-		os.Exit(1)
-	}
-
-	commands := flag.Args()
-	if commands[0] == "init" {
-
-		if len(commands) < 2 {
-			LOG.Fatal("init requires another operand")
-		}
-
-		if Exists(commands[1]) {
-			LOG.Fatal("cannot create site in an existing location")
-		}
-
-		os.Mkdir(commands[1], os.FileMode(0700))
-		os.MkdirAll(filepath.Join(commands[1], "build"), os.FileMode(0700))
-		os.MkdirAll(filepath.Join(commands[1], "src", "pages"), os.FileMode(0700))
-		os.MkdirAll(filepath.Join(commands[1], "src", "posts"), os.FileMode(0700))
-		os.MkdirAll(filepath.Join(commands[1], "themes", "default"), os.FileMode(0700))
-
-		file, err := os.OpenFile(filepath.Join(commands[1], "config.json"), os.O_CREATE, 0600)
-		if err != nil {
-			LOG.Warningf("could not open create config.json: %s\n", err)
-		}
-		file.Close()
-
-	} else if commands[0] == "build" {
-
-		manager := LoadConfig("config.json")
-		manager.LoadPages()
-		pages := manager.CheckPages()
-
-		for i := 0; i < len(pages); i++ {
-			if *verbose || *verbose2 {
-				LOG.Infof("building %s", pages[i].Name())
-			}
-
-			page := manager.LoadPage(pages[i])
-
-			html_name := filepath.Join(manager.Fspath, "build", strings.Replace(page.Fi.Name(), ".md", ".html", -1))
-
-			file, err := os.OpenFile(html_name, os.O_CREATE, 0644)
-			LOG.FatalOnError(err, "could not open file '%s': %s", html_name, err)
-
-			file.Write(RenderMarkdown([]byte(page.Content)))
-			file.Close()
-		}
-		manager.SaveRecords()
-
-	} else if commands[0] == "serve" {
-		LOG.Fatal("feature 'serve' not yet implemented")
-	} else if commands[0] == "deploy" {
-		LOG.Fatal("feature 'deploy' not yet implemented")
-	} else {
-		LOG.Fatalf("invalid operation '%s'\n", commands[0])
-	}
-}
-
-// Check if File / Directory Exists
-func Exists(path string) bool {
-	_, err := os.Stat(path)
-	if err != nil {
-		return false
-	}
-	return true
+    app := cli.NewApp()
+    app.Name = "goblin"
+    app.Usage = "a no-nonsense static site generator"
+    app.Version = VERSION
+    app.Flags = []cli.Flag{
+        cli.BoolFlag{"verbose", "explain what you are doing"},
+    }
+    
+    app.Commands = []cli.Command{
+        
+        {
+            Name: "init",
+            Usage: "initialize the static site directory",
+            Action: func (ctx *cli.Context) {
+                var site_directory string
+                var argc = len(ctx.Args())
+                
+                // set where the site workspace will be
+                if argc == 0 {
+                    site_directory = "."
+                } else if argc == 1 {
+                    site_directory = ctx.Args().First()
+                } else {
+                    OUT.Fatal("init takes either zero or one value")
+                }
+                
+                // setup site workspace
+                if !Exists(site_directory) {
+                    os.Mkdir(site_directory, os.FileMode(0700))  // it's a tough world, don't let others access
+                }
+                os.MkdirAll(filepath.Join(site_directory, "build"), os.FileMode(0700))
+                os.MkdirAll(filepath.Join(site_directory, "src", "pages"), os.FileMode(0700))
+                os.MkdirAll(filepath.Join(site_directory, "src", "posts"), os.FileMode(0700))
+                os.MkdirAll(filepath.Join(site_directory, "themes", "default"), os.FileMode(0700))
+                
+                // setup config
+                config := NewConfig(filepath.Join(site_directory, "config.json"))
+                config.Set("url", "")
+                config.Set("author", "")
+                config.Set("theme", "default")
+                SaveConfig(config)
+                
+                err := CreateSimpleFile(filepath.Join(site_directory, "src", "pages", "index.md"),
+                                        "\n---\ntitle: Home\nauthor: You\n\nlayout: page\nmainnav: true\norder: 0\nurl: /\nslug: home\n---\n\n##Home\n\nThis is the home page...\n\n",
+                                        0644)
+                if err != nil { OUT.Errorf("could not create index.md: %s", err) }
+            },
+        },
+        
+        {
+            Name: "build",
+            Usage: "build the static site",
+            Action: func (ctx *cli.Context) {
+                manager := &Manager{Config: LoadConfig("./config.json")}
+                manager.LoadPages()
+                pages := manager.CheckPages()
+                
+                for i := 0; i < len(pages); i++ {
+                    if ctx.GlobalBool("verbose") {
+                        OUT.Infof("now compiling '%s'", pages[i].Name())
+                    }
+                    page := manager.LoadPage(pages[i])
+                
+                    html_name := filepath.Join(manager.Fspath, "build", strings.Replace(page.Fi.Name(), ".md", ".html", -1))
+                    
+                    err := CreateSimpleFile(html_name, string(RenderMarkdown(page.Content)), 0644)
+                    if err != nil { OUT.Errorf("could not build %s: %s", page.Fi.Name(), err) }
+                }
+                manager.SaveRecords()
+                
+            },
+        },
+        
+    }
+    
+    app.Run(os.Args)
 }

@@ -2,7 +2,7 @@ package main
 
 import "github.com/russross/blackfriday"
 
-func RenderMarkdown(content []byte) []byte {
+func RenderMarkdown(content string) string {
 	htmlFlags := 0
 	//htmlFlags |= blackfriday.HTML_SKIP_SCRIPT
 	htmlFlags |= blackfriday.HTML_USE_XHTML
@@ -19,5 +19,5 @@ func RenderMarkdown(content []byte) []byte {
 	extensions |= blackfriday.EXTENSION_STRIKETHROUGH
 	extensions |= blackfriday.EXTENSION_SPACE_HEADERS
 
-	return blackfriday.Markdown(content, renderer, extensions)
+	return string(blackfriday.Markdown([]byte(content), renderer, extensions))
 }

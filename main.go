@@ -1,11 +1,13 @@
 package main
 
+import "fmt"
 import "os"
 import "path/filepath"
 import "strings"
 
 import "github.com/aisola/reporter"
 import "github.com/codegangsta/cli"
+import "github.com/flosch/pongo"
 
 const VERSION = "0.2"
 
@@ -65,6 +67,8 @@ func main() {
             Name: "build",
             Usage: "build the static site",
             Action: func (ctx *cli.Context) {
+                var html_name string
+                
                 manager := &Manager{Config: LoadConfig("./config.json")}
                 manager.LoadPages()
                 pages := manager.CheckPages()
@@ -74,10 +78,28 @@ func main() {
                         OUT.Infof("now compiling '%s'", pages[i].Name())
                     }
                     page := manager.LoadPage(pages[i])
-                
-                    html_name := filepath.Join(manager.Fspath, "build", strings.Replace(page.Fi.Name(), ".md", ".html", -1))
                     
-                    err := CreateSimpleFile(html_name, string(RenderMarkdown(page.Content)), 0644)
+                    if page.Url == "" {
+                        html_name = filepath.Join(manager.Fspath, "build", strings.Replace(page.Fi.Name(), ".md", ".html", -1))
+                    } else {
+                        html_name = filepath.Join(manager.Fspath, "build", page.Url, strings.Replace(page.Fi.Name(), ".md", ".html", -1))
+                    }
+                    
+                    layoutpath := filepath.Join(manager.Fspath, "themes", manager.Config.GetString("theme"), fmt.Sprintf("%s.html",page.Layout))
+                    pongocontext := &pongo.Context{
+                        "site_title": manager.Config.GetString("title"),
+                        "site_url": manager.Config.GetString("url"),
+                        "site_author": manager.Config.GetString("author"),
+                        
+                        "page_title": page.Title,
+                        "page_author": page.Author,
+                        
+                        "content": string(RenderMarkdown(page.Content)),
+                    }
+                    
+                    theme_out := RenderTheme(layoutpath, pongocontext)
+                    
+                    err := CreateSimpleFile(html_name, theme_out, 0644)
                     if err != nil { OUT.Errorf("could not build %s: %s", page.Fi.Name(), err) }
                 }
                 manager.SaveRecords()

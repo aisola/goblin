@@ -1,5 +1,6 @@
 package main
 
+import "github.com/flosch/pongo"
 import "github.com/russross/blackfriday"
 
 func RenderMarkdown(content string) string {
@@ -20,4 +21,11 @@ func RenderMarkdown(content string) string {
 	extensions |= blackfriday.EXTENSION_SPACE_HEADERS
 
 	return string(blackfriday.Markdown([]byte(content), renderer, extensions))
+}
+
+func RenderTheme(path string, context *pongo.Context) string {
+    template := pongo.Must(pongo.FromFile(path, nil))
+    out, err := template.Execute(context)
+    if err != nil { panic(err) }
+    return *out
 }

@@ -1,6 +1,5 @@
 package main
 
-import "bytes"
 import "encoding/json"
 import "log"
 import "os"
@@ -57,12 +56,8 @@ func (c *Config) parse() error {
 		return err
 	}
 	defer f.Close()
-	b := new(bytes.Buffer)
-	_, err = b.ReadFrom(f)
-	if err != nil {
-		return err
-	}
-	err = json.Unmarshal(b.Bytes(), &c.data)
+	configdecode := json.NewDecoder(f)
+    err = configdecode.Decode(&c.data)
 	if err != nil {
 		return err
 	}

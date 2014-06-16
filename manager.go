@@ -39,24 +39,26 @@ func (m *Manager) SaveRecords() {
     // setup config
     config := NewConfig(filepath.Join(m.Fspath, ".goblinpages"))
     for i := 0; i < len(m.Pages); i++ {
-		config.Set(m.Pages[i].Name(), m.Pages[i].ModTime())
+		config.Set(m.Pages[i].Name(), m.Pages[i].ModTime().String())
 	}
     SaveConfig(config)
 }
 
-func (m *Manager) CheckPages() []os.FileInfo {
-	if Exists(filepath.Join(m.Fspath, ".goblinpages")) {
+func (m *Manager) CheckPages(all bool) []os.FileInfo {
+    OUT.Infof("all: %v\n", all)
+    if all == false && Exists(filepath.Join(m.Fspath, ".goblinpages")) {
         gobpages := LoadConfig(filepath.Join(m.Fspath, ".goblinpages"))
-		
+        
         rpages := make([]os.FileInfo, 0)
-		
+        
         for i := 0; i < len(m.Pages); i++ {
-			if gobpages.GetString(m.Pages[i].Name()) != m.Pages[i].ModTime().String() {
+            if gobpages.GetString(m.Pages[i].Name()) != m.Pages[i].ModTime().String() {
                 rpages = append(rpages, m.Pages[i])
             }
-		}
-		return rpages
-	}
+            
+        }
+        return rpages
+    }
 	return m.Pages
 }
 

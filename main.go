@@ -66,16 +66,19 @@ func main() {
         {
             Name: "build",
             Usage: "build the static site",
+            Flags: []cli.Flag{
+                cli.BoolFlag{"all", "build all files regardless of the last modified date"},
+            },
             Action: func (ctx *cli.Context) {
                 var html_name string
                 
                 manager := &Manager{Config: LoadConfig("./config.json")}
                 manager.LoadPages()
-                pages := manager.CheckPages()
+                pages := manager.CheckPages(ctx.IsSet("all"))
                 
                 for i := 0; i < len(pages); i++ {
                     if ctx.GlobalBool("verbose") {
-                        OUT.Infof("now compiling '%s'", pages[i].Name())
+                        OUT.Infof("now building '%s'", pages[i].Name())
                     }
                     page := manager.LoadPage(pages[i])
                     

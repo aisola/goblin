@@ -1,6 +1,7 @@
 package main
 
 import "fmt"
+import "io/ioutil"
 import "net/http"
 import "os"
 import "path/filepath"
@@ -27,7 +28,8 @@ func main() {
         
         {
             Name: "init",
-            Usage: "initialize the static site directory",
+            Usage: "initialize the workspace",
+            Description: "The init command initializes the static site, putting it in the given \n   directory if supplied. If the given directory does not exist, it will \n   be created.",
             Action: func (ctx *cli.Context) {
                 var site_directory string
                 var argc = len(ctx.Args())
@@ -75,11 +77,14 @@ func main() {
             },
         },
         
-        {
+        {   // TODO: impliment posts
             Name: "build",
             Usage: "build the static site",
+            Description: "The build command compiles each of the pages and posts into html and \n   matches them with their layout. The build will only build files that \n   have not been modified since their last build. If the all/a option is \n   set all of the pages/posts will be compiled regardless of whether \n   they have have been modified or not.",
             Flags: []cli.Flag{
-                cli.BoolFlag{"all", "build all files regardless of the last modified date"},
+                cli.BoolFlag{"all, a", "build all files regardless of the last modified date"},
+                // TODO: cli.BoolFlag{"pages, p", "pages build only"},
+                // TODO: cli.BoolFlag{"posts", "build posts only"},
             },
             Action: func (ctx *cli.Context) {
                 var site_directory string
@@ -92,7 +97,7 @@ func main() {
                 } else if argc == 1 {
                     site_directory = ctx.Args().First()
                 } else {
-                    OUT.Fatal("serve takes either zero or one value")
+                    OUT.Fatal("build takes either zero or one value")
                 }
                 
                 IfTrueExec(ctx.GlobalBool("verbose"), OUT.Infof, "loading site configuration\n")
@@ -108,7 +113,9 @@ func main() {
                     if page.Url == "" {
                         html_name = filepath.Join(manager.Fspath, "build", strings.Replace(page.Fi.Name(), ".md", ".html", -1))
                     } else {
-                        html_name = filepath.Join(manager.Fspath, "build", page.Url, strings.Replace(page.Fi.Name(), ".md", ".html", -1))
+                        err := os.MkdirAll(filepath.Join(manager.Fspath, "build", page.Url), 0755)
+                        OUT.FatalOnError(err, "cannot create necessary directory: %s", err)
+                        html_name = filepath.Join(manager.Fspath, "build", page.Url, "index.html")
                     }
                     
                     layoutpath := filepath.Join(manager.Fspath, "themes", manager.Config.GetString("theme"), fmt.Sprintf("%s.html",page.Layout))
@@ -136,8 +143,9 @@ func main() {
         {
             Name: "serve",
             Usage: "run the static site in a server",
+            Description: "The serve command creates a server (rooted in the workspace 'build' \n   'build' directory). The bind option sets where the server should \n   serve. (default: localhost:8080)",
             Flags: []cli.Flag{
-                cli.StringFlag{"port",":8080",`the server address to bind to (default: ":8080")`},
+                cli.StringFlag{"bind",":8080",`the server address to bind to (default: ":8080")`},
             },
             Action: func (ctx *cli.Context) {
                 var site_directory string
@@ -160,6 +168,42 @@ func main() {
             },
         },
         
+        {
+            Name: "clean-build",
+            Usage: "remove all files from the build directory (clean start)",
+            Description: "The clean-build command will remove all files under the \n   workspace build directory.",
+            Action: func (ctx *cli.Context) {
+                var site_directory string
+                var argc = len(ctx.Args())
+                
+                // set where the site workspace will be
+                if argc == 0 {
+                    site_directory = "."
+                } else if argc == 1 {
+                    site_directory = ctx.Args().First()
+                } else {
+                    OUT.Fatal("clean-build takes either zero or one value")
+                }
+                
+                IfTrueExec(ctx.GlobalBool("verbose"), OUT.Infof, "removing '%s'\n", filepath.Join(site_directory,".goblinpages"))
+                err := os.Remove(filepath.Join(site_directory,".goblinpages"))
+                if err != nil { OUT.Errorf("error removing '.goblinpages': %s", err) }
+                
+                IfTrueExec(ctx.GlobalBool("verbose"), OUT.Infof, "removing '%s'\n", filepath.Join(site_directory,".goblinposts"))
+                err = os.Remove(filepath.Join(site_directory,".goblinposts"))
+                if err != nil { OUT.Errorf("error removing '.goblinposts': %s", err) }
+                
+                IfTrueExec(ctx.GlobalBool("verbose"), OUT.Infof, "reading '%s'\n", filepath.Join(site_directory,"build"))
+                files, err := ioutil.ReadDir(filepath.Join(site_directory, "build"))
+                if err != nil { OUT.Errorf("error reading '%s': %s", site_directory, err) }
+                
+                for _, file := range files {
+                    IfTrueExec(ctx.GlobalBool("verbose"), OUT.Infof, "removing '%s'\n", filepath.Join(site_directory,"build",file.Name()))
+                    err := os.RemoveAll(filepath.Join(site_directory,"build",file.Name()))
+                    if err != nil { OUT.Errorf("error removing: %s", err) }
+                }
+            },
+        },
     }
     
     app.Run(os.Args)

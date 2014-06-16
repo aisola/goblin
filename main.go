@@ -1,6 +1,7 @@
 package main
 
 import "fmt"
+import "net/http"
 import "os"
 import "path/filepath"
 import "strings"
@@ -42,20 +43,31 @@ func main() {
                 
                 // setup site workspace
                 if !Exists(site_directory) {
+                    IfTrueExec(ctx.GlobalBool("verbose"), OUT.Infof, "creating '%s'", site_directory)
                     os.Mkdir(site_directory, os.FileMode(0700))  // it's a tough world, don't let others access
                 }
+                
+                IfTrueExec(ctx.GlobalBool("verbose"), OUT.Infof, "creating '%s'", filepath.Join(site_directory, "build"))
                 os.MkdirAll(filepath.Join(site_directory, "build"), os.FileMode(0700))
+                
+                IfTrueExec(ctx.GlobalBool("verbose"), OUT.Infof, "creating '%s'", filepath.Join(site_directory, "src", "pages"))
                 os.MkdirAll(filepath.Join(site_directory, "src", "pages"), os.FileMode(0700))
+                
+                IfTrueExec(ctx.GlobalBool("verbose"), OUT.Infof, "creating '%s'", filepath.Join(site_directory, "src", "posts"))
                 os.MkdirAll(filepath.Join(site_directory, "src", "posts"), os.FileMode(0700))
+                
+                IfTrueExec(ctx.GlobalBool("verbose"), OUT.Infof, "creating '%s'", filepath.Join(site_directory, "themes", "default"))
                 os.MkdirAll(filepath.Join(site_directory, "themes", "default"), os.FileMode(0700))
                 
                 // setup config
+                IfTrueExec(ctx.GlobalBool("verbose"), OUT.Infof, "creating '%s'", filepath.Join(site_directory, "config.json"))
                 config := NewConfig(filepath.Join(site_directory, "config.json"))
                 config.Set("url", "")
                 config.Set("author", "")
                 config.Set("theme", "default")
                 SaveConfig(config)
                 
+                IfTrueExec(ctx.GlobalBool("verbose"), OUT.Infof, "creating '%s'", filepath.Join(site_directory, "src", "pages", "index.md"))
                 err := CreateSimpleFile(filepath.Join(site_directory, "src", "pages", "index.md"),
                                         "\n---\ntitle: Home\nauthor: You\n\nlayout: page\nmainnav: true\norder: 0\nurl: /\nslug: home\n---\n\n##Home\n\nThis is the home page...\n\n",
                                         0644)
@@ -70,16 +82,27 @@ func main() {
                 cli.BoolFlag{"all", "build all files regardless of the last modified date"},
             },
             Action: func (ctx *cli.Context) {
+                var site_directory string
+                var argc = len(ctx.Args())
                 var html_name string
                 
-                manager := &Manager{Config: LoadConfig("./config.json")}
+                // set where the site workspace will be
+                if argc == 0 {
+                    site_directory = "."
+                } else if argc == 1 {
+                    site_directory = ctx.Args().First()
+                } else {
+                    OUT.Fatal("serve takes either zero or one value")
+                }
+                
+                IfTrueExec(ctx.GlobalBool("verbose"), OUT.Infof, "loading site configuration\n")
+                manager := LoadManager(filepath.Join(site_directory, "config.json"))
                 manager.LoadPages()
                 pages := manager.CheckPages(ctx.IsSet("all"))
                 
                 for i := 0; i < len(pages); i++ {
-                    if ctx.GlobalBool("verbose") {
-                        OUT.Infof("now building '%s'", pages[i].Name())
-                    }
+                    IfTrueExec(ctx.GlobalBool("verbose"), OUT.Infof, "now building '%s'", pages[i].Name())
+                    
                     page := manager.LoadPage(pages[i])
                     
                     if page.Url == "" {
@@ -107,6 +130,33 @@ func main() {
                 }
                 manager.SaveRecords()
                 
+            },
+        },
+        
+        {
+            Name: "serve",
+            Usage: "run the static site in a server",
+            Flags: []cli.Flag{
+                cli.StringFlag{"port",":8080",`the server address to bind to (default: ":8080")`},
+            },
+            Action: func (ctx *cli.Context) {
+                var site_directory string
+                var argc = len(ctx.Args())
+                
+                // set where the site workspace will be
+                if argc == 0 {
+                    site_directory = "."
+                } else if argc == 1 {
+                    site_directory = ctx.Args().First()
+                } else {
+                    OUT.Fatal("serve takes either zero or one value")
+                }
+                
+                IfTrueExec(ctx.GlobalBool("verbose"), OUT.Infof, "loading site configuration")
+                manager := LoadManager(filepath.Join(site_directory, "config.json"))
+                IfTrueExec(ctx.GlobalBool("verbose"), OUT.Infof, "serving '%s'\n", filepath.Join(manager.Fspath,"build"))
+                err := http.ListenAndServe(":8080", http.FileServer(http.Dir(filepath.Join(manager.Fspath,"build"))))
+                OUT.FatalOnError(err, "server had an error: %s", err)
             },
         },
         

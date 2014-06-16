@@ -26,6 +26,13 @@ type Manager struct {
 	Pages       []os.FileInfo
 }
 
+func LoadManager(path string) *Manager {
+    config := LoadConfig(path)
+    fspath, _ := filepath.Abs(filepath.Dir(path))
+    man := &Manager{Config: config, Fspath: fspath}
+    return man
+}
+
 func (m *Manager) LoadPages() {
 	pagefiles, err := ioutil.ReadDir(filepath.Join(m.Fspath, "src", "pages"))
 	OUT.FatalOnError(err, "could not read directory '%s': %s", filepath.Join(m.Fspath, "src", "pages"), err)
@@ -45,7 +52,6 @@ func (m *Manager) SaveRecords() {
 }
 
 func (m *Manager) CheckPages(all bool) []os.FileInfo {
-    OUT.Infof("all: %v\n", all)
     if all == false && Exists(filepath.Join(m.Fspath, ".goblinpages")) {
         gobpages := LoadConfig(filepath.Join(m.Fspath, ".goblinpages"))
         

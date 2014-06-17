@@ -137,6 +137,13 @@ func main() {
                 }
                 manager.SaveRecords()
                 
+                IfTrueExec(ctx.GlobalBool("verbose"), OUT.Infof, "copying theme static directory\n")
+                
+                staticdir_theme := filepath.Join(manager.Fspath, "themes", manager.Config.GetString("theme"), "static")
+                staticdir_build := filepath.Join(manager.Fspath, "build", "static")
+                
+                err := CopyDir(staticdir_theme, staticdir_build)
+                OUT.FatalOnError(err, "cannot copy static directory: %s", err)
             },
         },
         

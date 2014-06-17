@@ -6,16 +6,25 @@ import "net/http"
 import "os"
 import "path/filepath"
 import "strings"
+import "time"
 
 import "github.com/aisola/reporter"
 import "github.com/codegangsta/cli"
 import "github.com/flosch/pongo"
+import "github.com/inconshreveable/mousetrap"
 
 const VERSION = "0.3"
 
 var OUT = reporter.NewReporter("goblin", os.Stdout)
 
 func main() {
+    
+    if mousetrap.StartedByExplorer() {
+        OUT.Fatal("Do not double-click goblin, run it from the command line.")
+        time.Sleep(5 * time.Second)
+        os.Exit(1)
+    }
+    
     app := cli.NewApp()
     app.Name = "goblin"
     app.Usage = "a no-nonsense static site generator"
@@ -70,9 +79,7 @@ func main() {
                 SaveConfig(config)
                 
                 IfTrueExec(ctx.GlobalBool("verbose"), OUT.Infof, "creating '%s'", filepath.Join(site_directory, "src", "pages", "index.md"))
-                err := CreateSimpleFile(filepath.Join(site_directory, "src", "pages", "index.md"),
-                                        "\n---\ntitle: Home\nauthor: You\n\nlayout: page\nmainnav: true\norder: 0\nurl: /\nslug: home\n---\n\n##Home\n\nThis is the home page...\n\n",
-                                        0644)
+                err := CreateSimpleFile(filepath.Join(site_directory, "src", "pages", "index.md"), IndexMD, 0644)
                 if err != nil { OUT.Errorf("could not create index.md: %s", err) }
             },
         },
@@ -83,6 +90,7 @@ func main() {
             Description: "The build command compiles each of the pages and posts into html and \n   matches them with their layout. The build will only build files that \n   have not been modified since their last build. If the all/a option is \n   set all of the pages/posts will be compiled regardless of whether \n   they have have been modified or not.",
             Flags: []cli.Flag{
                 cli.BoolFlag{"all, a", "build all files regardless of the last modified date"},
+                // cli.BoolFlag{"file, f", "build a specific file"},
                 // TODO: cli.BoolFlag{"pages, p", "pages build only"},
                 // TODO: cli.BoolFlag{"posts", "build posts only"},
             },
@@ -118,16 +126,21 @@ func main() {
                         html_name = filepath.Join(manager.Fspath, "build", page.Url, "index.html")
                     }
                     
+                    _ = os.Remove(html_name)
+                    
                     layoutpath := filepath.Join(manager.Fspath, "themes", manager.Config.GetString("theme"), fmt.Sprintf("%s.html",page.Layout))
                     pongocontext := &pongo.Context{
                         "site_title": manager.Config.GetString("title"),
                         "site_url": manager.Config.GetString("url"),
                         "site_author": manager.Config.GetString("author"),
+                        "site_copyright": fmt.Sprintf(manager.Config.GetString("copyright"), time.Now().Year()),
                         
                         "page_title": page.Title,
                         "page_author": page.Author,
                         
                         "content": string(RenderMarkdown(page.Content)),
+                        
+                        "goblin_powered": `This website powered by the <a href="https://github.com/aisola/goblin.git" target="_blank">Goblin</a> Static Site Directory.`,
                     }
                     
                     theme_out := RenderTheme(layoutpath, pongocontext)
